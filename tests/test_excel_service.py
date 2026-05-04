@@ -1,9 +1,7 @@
 """Testes do ExcelService."""
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
+import openpyxl
 import pytest
 
 from app.services.excel_service import ExcelService
@@ -85,3 +83,36 @@ def test_export_edited(sample_data, tmp_path):
     out = ExcelService.export_edited(sample_data, "Plan1", "original.xlsx", tmp_path)
     assert out.exists()
     assert out.name == "original_edited.xlsx"
+
+
+def test_parse_real_xlsx(tmp_path):
+    """Testa parse com arquivo xlsx real criado via openpyxl."""
+    xl_path = tmp_path / "sample.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Dados"
+    ws.append(["PEDIDO", "QTDE", "STATUS"])
+    ws.append(["2001", 100, "A"])
+    ws.append(["2002", 200, "NR"])
+    wb.save(xl_path)
+
+    parsed = ExcelService.parse(xl_path)
+
+    assert parsed["filename"] == "sample.xlsx"
+    assert "Dados" in parsed["sheet_names"]
+    assert parsed["active_sheet"] == "Dados"
+    assert parsed["stats"]["total_rows"] == 2
+    assert parsed["stats"]["total_cols"] == 3
+    assert "PEDIDO" in parsed["stats"]["columns"]
+    rows = parsed["sheets"]["Dados"]
+    assert len(rows) == 2
+    assert str(rows[0]["PEDIDO"]) == "2001"
+
+
+def test_build_context_large_dataset(tmp_path):
+    """Quando total_rows > max_rows_full, omite dados completos."""
+    data = [{"PEDIDO": str(i), "QTDE": i} for i in range(10)]
+    parsed = _make_parsed(data)
+    parsed["stats"]["total_rows"] = 10
+    ctx = ExcelService.build_context(parsed, max_rows_full=5)
+    assert "omitidos" in ctx or "excedem" in ctx

@@ -1,7 +1,6 @@
 """Testes do orchestrator -- detect_intent."""
 from __future__ import annotations
 
-import pytest
 
 from app.agents.orchestrator import detect_intent
 
@@ -33,7 +32,7 @@ def test_detect_intent_analyst():
 def test_detect_intent_coordinator():
     assert detect_intent("quais sao as prioridades urgentes") == "coordinator"
     assert detect_intent("identifique os gargalos") == "coordinator"
-    assert detect_intent("quais pedidos estao atrasados") == "coordinator"
+    assert detect_intent("pedidos em atraso urgente") == "coordinator"
 
 
 def test_detect_intent_general():

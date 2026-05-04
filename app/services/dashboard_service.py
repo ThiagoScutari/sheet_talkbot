@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import warnings
 from datetime import datetime
 from pathlib import Path
