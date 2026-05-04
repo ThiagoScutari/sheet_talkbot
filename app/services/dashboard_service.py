@@ -213,7 +213,7 @@ class DashboardService:
             if matched_col:
                 vc = df[matched_col].value_counts()
                 pipeline_f.append(int(vc.get("F", 0)))
-                pipeline_ea.append(int(vc.get("EA", 0)))
+                pipeline_ea.append(int(vc.get("E/A", 0)))
                 pipeline_n.append(int(vc.get("N", 0)) + int(df[matched_col].isna().sum()))
             else:
                 pipeline_f.append(0)
