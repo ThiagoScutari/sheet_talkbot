@@ -6,6 +6,8 @@ from pathlib import Path
 
 import anthropic
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "orchestrator.md"
@@ -27,10 +29,10 @@ _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
         r"\banali[sz]", r"\bcalcul", r"\bquantos\b", r"\bquantas\b",
         r"\btotal\b", r"\bsoma\b", r"\bmédia\b", r"\bporcent",
         r"\bkpi\b", r"\bindicador", r"\bestatístic", r"\bstatístic",
-        r"\bdetalh", r"\bsemana\b", r"\bpedido\b",
+        r"\bdetalh", r"\bsemana\b", r"\bpedido\b", r"\bop\b", r"\bops\b",
     ]),
     ("coordinator", [
-        r"\bpriori[sz]", r"\bgargalo", r"\batraso", r"\brisco",
+        r"\bpriori[sz]", r"\bgargalo", r"\batrasa", r"\batraso", r"\brisco",
         r"\bpendente", r"\burgente", r"\bdecisão\b", r"\bacão\b",
         r"\bação\b", r"\bplano\b", r"\bestratég",
     ]),
@@ -58,7 +60,7 @@ async def ask_agent(
     messages = list(history[-8:])
     messages.append({"role": "user", "content": user_text})
 
-    client = anthropic.AsyncAnthropic()
+    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY or None)
     try:
         response = await client.messages.create(
             model=model,
