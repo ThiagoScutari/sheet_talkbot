@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import openpyxl
-import pytest
 
 from app.services.excel_service import ExcelService
 

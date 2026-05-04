@@ -1,8 +1,11 @@
-"""Testes do orchestrator -- detect_intent."""
+"""Testes do orchestrator -- detect_intent e ask_agent."""
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.agents.orchestrator import detect_intent
+import pytest
+
+from app.agents.orchestrator import ask_agent, detect_intent
 
 
 def test_detect_intent_dashboard():
@@ -39,3 +42,29 @@ def test_detect_intent_general():
     assert detect_intent("ola tudo bem") == "general"
     assert detect_intent("obrigado") == "general"
     assert detect_intent("como voce funciona") == "general"
+
+
+@pytest.mark.asyncio
+async def test_ask_agent_success():
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="  Resposta do agente  ")]
+    mock_client = MagicMock()
+    mock_client.messages = MagicMock()
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+    with patch("app.agents.orchestrator.anthropic.AsyncAnthropic", return_value=mock_client):
+        result = await ask_agent("ctx", "pergunta?", [], "claude-haiku-4-5-20251001")
+
+    assert result == "Resposta do agente"
+
+
+@pytest.mark.asyncio
+async def test_ask_agent_error():
+    mock_client = MagicMock()
+    mock_client.messages = MagicMock()
+    mock_client.messages.create = AsyncMock(side_effect=Exception("timeout"))
+
+    with patch("app.agents.orchestrator.anthropic.AsyncAnthropic", return_value=mock_client):
+        result = await ask_agent("ctx", "pergunta", [], "model")
+
+    assert "erro" in result.lower() or "Desculpe" in result
