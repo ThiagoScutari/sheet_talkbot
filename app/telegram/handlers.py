@@ -1,9 +1,11 @@
+"""Handlers do bot Telegram SheetTalk."""
 from __future__ import annotations
 
+import io
 import logging
-from pathlib import Path
 
 from telegram import Update
+from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from app.agents.orchestrator import ask_agent, detect_intent
@@ -11,24 +13,14 @@ from app.config import settings
 from app.services.audio_service import AudioService
 from app.services.dashboard_service import DashboardService
 from app.services.excel_service import ExcelService
-from app.telegram.formatters import split_message
+from app.telegram.formatters import split_long_message
 
 logger = logging.getLogger(__name__)
 
+# Estado em memoria -- chave: user_id
 user_sessions: dict[int, dict] = {}
 
-AUDIO_FALLBACK = "Não consegui entender o áudio 😊 Pode repetir por favor"
-
-_WELCOME = (
-    "👋 Olá! Sou o *SheetTalk* — seu assistente de planilhas de produção.\n\n"
-    "📎 Envie uma planilha *.xlsx* para começar.\n\n"
-    "O que posso fazer:\n"
-    "• 🔍 Responder perguntas sobre os dados\n"
-    "• 📊 Gerar dashboard visual (diga *gere um dashboard*)\n"
-    "• ✏️ Editar dados (*alterar QTDE do pedido 123 para 5000*)\n"
-    "• 💾 Exportar planilha editada (*exportar planilha*)\n"
-    "• 🎙️ Aceitar perguntas por voz"
-)
+AUDIO_FALLBACK = "Nao consegui entender o audio. Pode repetir por favor?"
 
 
 def _get_session(user_id: int) -> dict:
@@ -44,143 +36,191 @@ def _get_session(user_id: int) -> dict:
 
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(_WELCOME, parse_mode="Markdown")
+    msg = (
+        "Ola! Sou o SheetTalk -- seu assistente para analise de planilhas.\n\n"
+        "Como comecar:\n"
+        "1. Envie uma planilha .xlsx e eu carrego os dados\n"
+        "2. Faca perguntas por texto ou audio\n"
+        "3. Peca um dashboard para visualizar os dados\n"
+        "4. Edite dados com linguagem natural\n"
+        "5. Exporte a planilha editada\n\n"
+        "Envie sua planilha para comecar!"
+    )
+    await update.message.reply_text(msg)
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
     doc = update.message.document
-    if not doc.file_name.endswith(".xlsx"):
-        await update.message.reply_text("⚠️ Por favor, envie um arquivo .xlsx")
+
+    if not doc.file_name.lower().endswith(".xlsx"):
+        await update.message.reply_text("Por favor envie um arquivo .xlsx.")
         return
 
-    await update.message.reply_chat_action("upload_document")
-    file = await context.bot.get_file(doc.file_id)
-    file_bytes = await file.download_as_bytearray()
+    await update.message.reply_chat_action(ChatAction.UPLOAD_DOCUMENT)
 
-    path = ExcelService.save_upload(bytes(file_bytes), doc.file_name, settings.UPLOAD_DIR)
-    parsed = ExcelService.parse(path)
-    ctx = ExcelService.build_context(parsed)
+    tg_file = await context.bot.get_file(doc.file_id)
+    buf = io.BytesIO()
+    await tg_file.download_to_memory(buf)
+    file_bytes = buf.getvalue()
 
-    session = _get_session(update.effective_user.id)
-    session["parsed"] = parsed
-    session["edit_data"] = list(parsed["sheets"][parsed["active_sheet"]])
-    session["edits"] = []
-    session["history"] = []
-    session["context"] = ctx
+    saved_path = ExcelService.save_upload(file_bytes, doc.file_name, settings.UPLOAD_DIR)
+
+    try:
+        parsed = ExcelService.parse(saved_path)
+    except Exception as exc:
+        logger.error("Erro ao parsear planilha: %s", exc)
+        await update.message.reply_text(f"Nao consegui ler a planilha: {exc}")
+        return
+
+    context_text = ExcelService.build_context(parsed)
+    active = parsed["active_sheet"]
+    data = parsed["sheets"][active]
+
+    sess = _get_session(user_id)
+    sess["parsed"] = parsed
+    sess["edit_data"] = list(data)
+    sess["edits"] = []
+    sess["history"] = []
+    sess["context"] = context_text
 
     stats = parsed["stats"]
-    msg = (
-        f"✅ Planilha carregada: *{parsed['filename']}*\n"
-        f"📋 {stats['total_rows']} pedidos | {stats['total_cols']} colunas\n\n"
-        f"Agora pode fazer perguntas sobre os dados!"
+    cols_preview = ", ".join(str(c) for c in stats["columns"][:8])
+    if len(stats["columns"]) > 8:
+        cols_preview += "..."
+    reply = (
+        f"Planilha {parsed['filename']} carregada!\n\n"
+        f"Resumo:\n"
+        f"Linhas: {stats['total_rows']}\n"
+        f"Colunas: {stats['total_cols']}\n"
+        f"Campos: {cols_preview}\n\n"
+        "Agora pode me fazer perguntas sobre os dados!"
     )
-    await update.message.reply_text(msg, parse_mode="Markdown")
+    await update.message.reply_text(reply)
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not (settings.TELEGRAM_BOT_TOKEN and settings.OPENAI_API_KEY):
+        await update.message.reply_text(AUDIO_FALLBACK)
+        return
+
     voice = update.message.voice or update.message.audio
     if not voice:
         return
 
-    if not settings.OPENAI_API_KEY or not settings.TELEGRAM_BOT_TOKEN:
-        await update.message.reply_text(AUDIO_FALLBACK)
-        return
-
-    await update.message.reply_chat_action("typing")
     audio_svc = AudioService(
         telegram_token=settings.TELEGRAM_BOT_TOKEN,
         openai_api_key=settings.OPENAI_API_KEY,
     )
-    text = await audio_svc.transcribe(voice.file_id)
 
-    if not text:
+    await update.message.reply_chat_action(ChatAction.TYPING)
+    transcribed = await audio_svc.transcribe(voice.file_id)
+
+    if not transcribed:
         await update.message.reply_text(AUDIO_FALLBACK)
         return
 
-    logger.info("Áudio transcrito: %s", text[:80])
-    await _process_text(update, context, text, from_voice=True)
+    await update.message.reply_text(f"Voce disse: {transcribed}")
+    await _process_text(update, context, transcribed)
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (update.message.text or "").strip()
-    if not text:
-        return
-    await _process_text(update, context, text, from_voice=False)
+    text = update.message.text or ""
+    await _process_text(update, context, text)
 
 
 async def _process_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    text: str,
-    from_voice: bool = False,
+    update: Update, context: ContextTypes.DEFAULT_TYPE, text: str
 ) -> None:
     user_id = update.effective_user.id
-    session = _get_session(user_id)
+    sess = _get_session(user_id)
 
-    if session["parsed"] is None:
+    if not sess["parsed"]:
         await update.message.reply_text(
-            "📎 Por favor, envie primeiro uma planilha *.xlsx* para eu analisar.",
-            parse_mode="Markdown",
+            "Ainda nao recebi nenhuma planilha. Envie um arquivo .xlsx para comecar!"
         )
         return
 
     intent = detect_intent(text)
-    logger.info("user=%d intent=%s text=%s", user_id, intent, text[:60])
+    logger.info("user=%d intent=%s text=%r", user_id, intent, text[:60])
 
     if intent == "export":
-        if not session["edit_data"]:
+        if not sess["edit_data"]:
             await update.message.reply_text("Nenhum dado para exportar.")
             return
-        parsed = session["parsed"]
+        parsed = sess["parsed"]
+        active = parsed["active_sheet"]
         out_path = ExcelService.export_edited(
-            data=session["edit_data"],
-            sheet_name=parsed["active_sheet"],
-            original_name=parsed["filename"],
-            output_dir=settings.EDITED_DIR,
+            sess["edit_data"],
+            active,
+            parsed["filename"],
+            settings.EDITED_DIR,
         )
         with open(out_path, "rb") as f:
             await update.message.reply_document(
                 document=f,
                 filename=out_path.name,
-                caption=f"✅ Planilha exportada com {len(session['edits'])} edição(ões).",
+                caption="Planilha editada exportada!",
             )
+        _append_history(sess, text, f"Planilha exportada: {out_path.name}")
         return
 
     if intent == "edit":
-        result = ExcelService.apply_edit(session["edit_data"], text)
+        result = ExcelService.apply_edit(sess["edit_data"], text)
         if result["ok"]:
-            session["edit_data"] = result["data"]
-            session["edits"].append(text)
-            session["context"] = ExcelService.build_context(
-                {**session["parsed"], "sheets": {session["parsed"]["active_sheet"]: result["data"]}}
-            )
-        await update.message.reply_text(result["msg"])
+            sess["edit_data"] = result["data"]
+            sess["edits"].append(text)
+            active = sess["parsed"]["active_sheet"]
+            updated_parsed = {
+                **sess["parsed"],
+                "sheets": {active: result["data"]},
+            }
+            sess["context"] = ExcelService.build_context(updated_parsed)
+        reply = result["msg"]
+        await update.message.reply_text(reply)
+        _append_history(sess, text, reply)
         return
 
     if intent == "dashboard":
-        await update.message.reply_chat_action("upload_document")
-        out_path = DashboardService.generate(session["parsed"], settings.DASHBOARD_DIR)
-        with open(out_path, "rb") as f:
-            await update.message.reply_document(
-                document=f,
-                filename=out_path.name,
-                caption="📊 Dashboard gerado! Abra no navegador do celular.",
+        await update.message.reply_chat_action(ChatAction.UPLOAD_DOCUMENT)
+        try:
+            html_path = DashboardService.generate(
+                sess["parsed"],
+                settings.DASHBOARD_DIR,
             )
+            with open(html_path, "rb") as f:
+                await update.message.reply_document(
+                    document=f,
+                    filename=html_path.name,
+                    caption="Dashboard gerado! Abra no navegador do celular.",
+                )
+            _append_history(sess, text, f"Dashboard gerado: {html_path.name}")
+        except Exception as exc:
+            logger.error("Dashboard error: %s", exc)
+            await update.message.reply_text(f"Erro ao gerar dashboard: {exc}")
         return
 
-    await update.message.reply_chat_action("typing")
-    model = settings.ANALYST_MODEL if intent in ("analyst", "coordinator") else settings.ORCHESTRATOR_MODEL
-    reply = await ask_agent(
-        context=session["context"],
-        user_text=text,
-        history=session["history"],
-        model=model,
+    model = (
+        settings.ANALYST_MODEL
+        if intent in ("analyst", "coordinator")
+        else settings.ORCHESTRATOR_MODEL
     )
 
-    session["history"].append({"role": "user", "content": text})
-    session["history"].append({"role": "assistant", "content": reply})
-    if len(session["history"]) > 16:
-        session["history"] = session["history"][-16:]
+    await update.message.reply_chat_action(ChatAction.TYPING)
+    try:
+        reply = await ask_agent(sess["context"], text, sess["history"], model)
+    except Exception as exc:
+        logger.error("ask_agent error: %s", exc)
+        reply = f"Erro ao consultar agente: {exc}"
 
-    for part in split_message(reply):
+    _append_history(sess, text, reply)
+
+    for part in split_long_message(reply):
         await update.message.reply_text(part)
+
+
+def _append_history(sess: dict, user_text: str, bot_reply: str) -> None:
+    sess["history"].append({"role": "user", "content": user_text})
+    sess["history"].append({"role": "assistant", "content": bot_reply})
+    if len(sess["history"]) > 16:
+        sess["history"] = sess["history"][-16:]
