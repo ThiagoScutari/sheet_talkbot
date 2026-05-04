@@ -38,3 +38,24 @@ def test_html_has_big_numbers(sample_data, tmp_path):
     content = path.read_text(encoding="utf-8")
     assert "Total Pedidos" in content
     assert "Total Pe" in content
+
+
+def test_html_has_drilldown(sample_data, tmp_path):
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    assert "Drilldown por Etapa" in content
+
+
+def test_html_has_etapas_buttons(sample_data, tmp_path):
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    assert "etapa-btn" in content
+
+
+def test_html_has_obs_table(sample_data, tmp_path):
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    assert "Observa" in content

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -28,10 +29,20 @@ _TEMPLATE = """<!DOCTYPE html>
   .chart-card h2 { font-size: 0.8rem; color: #7B8BA6; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
   .chart-card.wide { grid-column: 1 / -1; }
   canvas { max-height: 280px; }
+  .etapa-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid #1C2740; background: transparent; color: #7B8BA6; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .etapa-btn.active { background: rgba(59,130,246,0.15); border-color: #3B82F6; color: #3B82F6; }
+  .etapa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .status-item { padding: 12px 16px; border-radius: 10px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .status-item.ok     { background: rgba(16,185,129,0.1); color: #10B981; }
+  .status-item.danger { background: rgba(239,68,68,0.1);  color: #EF4444; }
+  .status-item.warn   { background: rgba(245,158,11,0.1); color: #F59E0B; }
+  .status-item.info   { background: rgba(59,130,246,0.1); color: #3B82F6; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .etapa-title { font-size: 16px; font-weight: 800; color: #EAF0FA; }
 </style>
 </head>
 <body>
-<h1>📊 Dashboard Produção — {{ filename }}</h1>
+<h1>&#x1F4CA; Dashboard Produção — {{ filename }}</h1>
 
 <div class="cards">
   <div class="card"><div class="value">{{ total_pedidos }}</div><div class="label">Total Pedidos</div></div>
@@ -62,6 +73,69 @@ _TEMPLATE = """<!DOCTYPE html>
     <canvas id="stackedPipeline"></canvas>
   </div>
 </div>
+
+<!-- Drilldown por Etapa -->
+<div class="chart-card" style="margin-top:16px">
+  <h2>&#x1F4CB; Drilldown por Etapa</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;margin-top:8px">
+    <button class="etapa-btn" onclick="showEtapa(0)">Aprov. Visual</button>
+    <button class="etapa-btn" onclick="showEtapa(1)">Fiação</button>
+    <button class="etapa-btn" onclick="showEtapa(2)">Tecelagem</button>
+    <button class="etapa-btn" onclick="showEtapa(3)">Tinturaria</button>
+    <button class="etapa-btn" onclick="showEtapa(4)">Estamparia</button>
+    <button class="etapa-btn" onclick="showEtapa(5)">Modelagem</button>
+    <button class="etapa-btn" onclick="showEtapa(6)">Corte</button>
+    <button class="etapa-btn" onclick="showEtapa(7)">Costura</button>
+    <button class="etapa-btn" onclick="showEtapa(8)">RFID</button>
+    <button class="etapa-btn" onclick="showEtapa(9)">Embalagem</button>
+  </div>
+  <div id="etapa-card">
+    <div class="etapa-title" id="etapa-nome"></div>
+    <div class="etapa-grid">
+      <div class="status-item ok">
+        <span class="dot" style="background:#10B981"></span>
+        Finalizado (F): <strong id="f-val"></strong>&nbsp;(<span id="f-pct"></span>)
+      </div>
+      <div class="status-item danger">
+        <span class="dot" style="background:#EF4444"></span>
+        Não Iniciado (N): <strong id="n-val"></strong>&nbsp;(<span id="n-pct"></span>)
+      </div>
+      <div class="status-item warn">
+        <span class="dot" style="background:#F59E0B"></span>
+        Em Andamento (E/A): <strong id="ea-val"></strong>&nbsp;(<span id="ea-pct"></span>)
+      </div>
+      <div class="status-item info">
+        <span class="dot" style="background:#3B82F6"></span>
+        Não se Aplica (N/A): <strong id="na-val"></strong>&nbsp;(<span id="na-pct"></span>)
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabela de Observações -->
+{% if obs_data %}
+<div class="chart-card" style="margin-top:16px">
+  <h2>&#x1F4DD; Observações</h2>
+  <div style="overflow-x:auto;margin-top:8px">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr>
+          <th style="padding:8px 12px;text-align:left;color:#3B82F6;border-bottom:2px solid #1C2740">Pedido</th>
+          <th style="padding:8px 12px;text-align:left;color:#3B82F6;border-bottom:2px solid #1C2740">OBS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in obs_data %}
+        <tr style="background:{{ '#0C1220' if loop.index is odd else 'transparent' }}">
+          <td style="padding:6px 12px;color:#EAF0FA;border-bottom:1px solid #1C2740;white-space:nowrap;font-weight:700">{{ item.pedido }}</td>
+          <td style="padding:6px 12px;color:#7B8BA6;border-bottom:1px solid #1C2740">{{ item.obs }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 <script>
 const chartDefaults = {
@@ -120,9 +194,9 @@ new Chart(document.getElementById('stackedPipeline'), {
   data: {
     labels: {{ pipeline_etapas | tojson }},
     datasets: [
-      { label: 'Finalizado', data: {{ pipeline_f | tojson }}, backgroundColor: '#10B981', borderRadius: 2 },
+      { label: 'Finalizado',   data: {{ pipeline_f  | tojson }}, backgroundColor: '#10B981', borderRadius: 2 },
       { label: 'Em Andamento', data: {{ pipeline_ea | tojson }}, backgroundColor: '#3B82F6', borderRadius: 2 },
-      { label: 'Não Iniciado', data: {{ pipeline_n | tojson }}, backgroundColor: '#374151', borderRadius: 2 }
+      { label: 'Não Iniciado', data: {{ pipeline_n  | tojson }}, backgroundColor: '#374151', borderRadius: 2 }
     ]
   },
   options: {
@@ -135,6 +209,37 @@ new Chart(document.getElementById('stackedPipeline'), {
     }
   }
 });
+
+// 5. Drilldown por Etapa
+const etapasData = {{ etapas_json | safe }};
+const totalPedidos = {{ total_rows }};
+const etapaNames = [
+  "Aprovação Visual","Fiação","Tecelagem","Tinturaria","Estamparia",
+  "Modelagem","Corte","Costura","Aplicação RFID","EMBALAGEM"
+];
+
+function showEtapa(idx) {
+  var e = etapasData[idx];
+  document.getElementById('etapa-nome').textContent =
+    etapaNames[idx] + ' — ' + totalPedidos + ' pedidos';
+  document.getElementById('f-val').textContent  = e.F;
+  document.getElementById('f-pct').textContent  = Math.round(e.F  / totalPedidos * 100) + '%';
+  document.getElementById('n-val').textContent  = e.N;
+  document.getElementById('n-pct').textContent  = Math.round(e.N  / totalPedidos * 100) + '%';
+  document.getElementById('ea-val').textContent = e.EA;
+  document.getElementById('ea-pct').textContent = Math.round(e.EA / totalPedidos * 100) + '%';
+  document.getElementById('na-val').textContent = e.NA;
+  document.getElementById('na-pct').textContent = Math.round(e.NA / totalPedidos * 100) + '%';
+
+  document.querySelectorAll('.etapa-btn').forEach(function(b, i) {
+    b.classList.toggle('active', i === idx);
+  });
+}
+
+// Iniciar com a etapa-gargalo (maior N)
+var maxN = -1, gargaloIdx = 0;
+etapasData.forEach(function(e, i) { if (e.N > maxN) { maxN = e.N; gargaloIdx = i; } });
+showEtapa(gargaloIdx);
 </script>
 </body>
 </html>
@@ -159,6 +264,10 @@ class DashboardService:
 
         def col(name: str) -> str | None:
             return cols.get(name.upper())
+
+        def fuzzy_col(etapa: str) -> str | None:
+            key = etapa.lower().replace(" ", "")
+            return next((c for c in df.columns if key in c.lower().replace(" ", "")), None)
 
         # --- Big Numbers ---
         total_pedidos = len(df)
@@ -201,24 +310,40 @@ class DashboardService:
         else:
             secao_labels, secao_data = [], []
 
-        # --- Stacked Pipeline ---
+        # --- Stacked Pipeline + Drilldown stats (same fuzzy match, one pass) ---
         etapa_display = [
             "Aprov. Visual", "Fiação", "Tecelagem", "Tinturaria",
             "Estamparia", "Modelagem", "Corte", "Costura",
             "RFID", "Embalagem",
         ]
         pipeline_f, pipeline_ea, pipeline_n = [], [], []
+        etapas_stats = []
         for etapa in DashboardService.ETAPAS:
-            matched_col = next((c for c in df.columns if etapa.lower().replace(" ", "") in c.lower().replace(" ", "")), None)
+            matched_col = fuzzy_col(etapa)
             if matched_col:
                 vc = df[matched_col].value_counts()
-                pipeline_f.append(int(vc.get("F", 0)))
-                pipeline_ea.append(int(vc.get("E/A", 0)))
-                pipeline_n.append(int(vc.get("N", 0)) + int(df[matched_col].isna().sum()))
+                f_cnt  = int(vc.get("F",   0))
+                ea_cnt = int(vc.get("E/A", 0))
+                na_cnt = int(vc.get("N/A", 0))
+                n_cnt  = int(vc.get("N",   0)) + int(df[matched_col].isna().sum())
+                pipeline_f.append(f_cnt)
+                pipeline_ea.append(ea_cnt)
+                pipeline_n.append(n_cnt)
+                etapas_stats.append({"F": f_cnt, "N": n_cnt, "EA": ea_cnt, "NA": na_cnt})
             else:
                 pipeline_f.append(0)
                 pipeline_ea.append(0)
                 pipeline_n.append(total_pedidos)
+                etapas_stats.append({"F": 0, "N": total_pedidos, "EA": 0, "NA": 0})
+
+        # --- OBS table ---
+        pedido_col = col("PEDIDO")
+        obs_data: list[dict] = []
+        if obs_col and pedido_col:
+            for r in data:
+                obs_val = r.get(obs_col)
+                if obs_val and str(obs_val).strip():
+                    obs_data.append({"pedido": r.get(pedido_col, ""), "obs": str(obs_val).strip()})
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
         out_path = output_dir / f"{timestamp}_dashboard.html"
@@ -240,6 +365,9 @@ class DashboardService:
             pipeline_f=pipeline_f,
             pipeline_ea=pipeline_ea,
             pipeline_n=pipeline_n,
+            etapas_json=json.dumps(etapas_stats),
+            total_rows=total_pedidos,
+            obs_data=obs_data,
         )
 
         out_path.write_text(html, encoding="utf-8")
