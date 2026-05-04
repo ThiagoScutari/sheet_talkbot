@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -17,10 +18,10 @@ _TEMPLATE = """<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #060A13; color: #EAF0FA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 16px; }
+  body { background: #060A13; color: #EAF0FA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 12px; max-width: 100vw; overflow-x: hidden; }
   h1 { font-size: 1.1rem; color: #7B8BA6; margin-bottom: 16px; text-align: center; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .card { background: #0C1220; border: 1px solid #1C2740; border-radius: 10px; padding: 14px 10px; text-align: center; }
+  .card { background: #0C1220; border: 1px solid #1C2740; border-radius: 10px; padding: 14px 10px; text-align: center; overflow: hidden; word-break: break-word; }
   .card .value { font-size: 1.6rem; font-weight: 700; color: #EAF0FA; }
   .card .label { font-size: 0.7rem; color: #7B8BA6; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
   .charts { display: grid; grid-template-columns: 1fr; gap: 16px; }
@@ -31,8 +32,9 @@ _TEMPLATE = """<!DOCTYPE html>
   canvas { max-height: 280px; }
   .etapa-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid #1C2740; background: transparent; color: #7B8BA6; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
   .etapa-btn.active { background: rgba(59,130,246,0.15); border-color: #3B82F6; color: #3B82F6; }
-  .etapa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-  .status-item { padding: 12px 16px; border-radius: 10px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .etapa-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px; }
+  @media(min-width:480px) { .etapa-grid { grid-template-columns: 1fr 1fr; } }
+  .status-item { padding: 12px 14px; border-radius: 10px; font-size: 13px; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
   .status-item.ok     { background: rgba(16,185,129,0.1); color: #10B981; }
   .status-item.danger { background: rgba(239,68,68,0.1);  color: #EF4444; }
   .status-item.warn   { background: rgba(245,158,11,0.1); color: #F59E0B; }
@@ -323,8 +325,8 @@ class DashboardService:
             if matched_col:
                 vc = df[matched_col].value_counts()
                 f_cnt  = int(vc.get("F",   0))
-                ea_cnt = int(vc.get("E/A", 0))
-                na_cnt = int(vc.get("N/A", 0))
+                ea_cnt = int(vc.get("E/A", 0)) + int(vc.get("EA", 0))
+                na_cnt = int(vc.get("N/A", 0)) + int(vc.get("NA", 0))
                 n_cnt  = int(vc.get("N",   0)) + int(df[matched_col].isna().sum())
                 pipeline_f.append(f_cnt)
                 pipeline_ea.append(ea_cnt)
@@ -342,8 +344,13 @@ class DashboardService:
         if obs_col and pedido_col:
             for r in data:
                 obs_val = r.get(obs_col)
-                if obs_val and str(obs_val).strip():
-                    obs_data.append({"pedido": r.get(pedido_col, ""), "obs": str(obs_val).strip()})
+                if obs_val is None:
+                    continue
+                if isinstance(obs_val, float) and math.isnan(obs_val):
+                    continue
+                obs_str = str(obs_val).strip()
+                if obs_str and obs_str.lower() != "nan":
+                    obs_data.append({"pedido": r.get(pedido_col, ""), "obs": obs_str})
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
         out_path = output_dir / f"{timestamp}_dashboard.html"

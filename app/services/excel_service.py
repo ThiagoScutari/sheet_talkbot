@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import warnings
 from pathlib import Path
@@ -83,7 +84,7 @@ class ExcelService:
         if cat_cols:
             lines.append("## Valores Únicos (colunas categóricas, até 20 valores)")
             for col in cat_cols[:15]:
-                unique_vals = df[col].dropna().unique().tolist()
+                unique_vals = [v for v in df[col].dropna().unique().tolist() if not (isinstance(v, float) and math.isnan(v))]
                 if 1 < len(unique_vals) <= 20:
                     lines.append(f"  {col}: {unique_vals}")
             lines.append("")
