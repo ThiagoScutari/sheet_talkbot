@@ -1,0 +1,20 @@
+[Unit]
+Description=SheetTalk Bot -- Imagem Brasil
+Documentation=https://github.com/ThiagoScutari/sheet_talkbot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/sheet_talkbot
+EnvironmentFile=/home/ubuntu/sheet_talkbot/.env
+ExecStart=/home/ubuntu/sheet_talkbot/venv/bin/python scripts/run_bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sheettalk
+
+[Install]
+WantedBy=multi-user.target
