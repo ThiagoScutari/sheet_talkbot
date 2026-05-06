@@ -1,0 +1,28 @@
+services:
+  sheettalk-bot:
+    build: .
+    container_name: sheettalk-bot
+    restart: always
+    env_file: .env
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ORCHESTRATOR_MODEL=${ORCHESTRATOR_MODEL:-claude-haiku-4-5-20251001}
+      - ANALYST_MODEL=${ANALYST_MODEL:-claude-sonnet-4-20250514}
+      - DATA_DIR=${DATA_DIR:-data}
+    volumes:
+      - sheettalk_data:/app/data
+      - sheettalk_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  sheettalk_data:
+    name: sheettalk_data
+  sheettalk_logs:
+    name: sheettalk_logs
