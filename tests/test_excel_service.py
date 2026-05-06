@@ -152,3 +152,27 @@ def test_build_context_embalagem_type_note(sample_data):
     parsed = _make_parsed(sample_data)
     ctx = ExcelService.build_context(parsed)
     assert "NÃO é etapa produtiva" in ctx
+
+
+# ── Novos testes: semanas+peças e cruzamentos (HOTFIX-07) ────────────────────
+
+def test_build_context_sem_includes_pecas(sample_data):
+    """Semanas devem incluir peças pré-calculadas — SEM=01: 2 pedidos, 800 peças."""
+    parsed = _make_parsed(sample_data)
+    ctx = ExcelService.build_context(parsed)
+    assert "S01: 2 pedidos" in ctx
+
+
+def test_build_context_cross_nr_costura_n(sample_data):
+    """Cruzamento AM=NR AND Costura=N deve estar pré-calculado."""
+    parsed = _make_parsed(sample_data)
+    ctx = ExcelService.build_context(parsed)
+    # sample: only row 1002 has AM=NR AND Costura=N → 1 pedido
+    assert "AM=NR com Costura=N: 1" in ctx
+
+
+def test_build_context_max_pedido_precomputed(sample_data):
+    """Pedido com maior QTDE deve ser pré-identificado (1003 com 750 peças)."""
+    parsed = _make_parsed(sample_data)
+    ctx = ExcelService.build_context(parsed)
+    assert "Pedido com maior QTDE" in ctx

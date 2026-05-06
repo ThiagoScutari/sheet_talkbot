@@ -128,19 +128,50 @@ class ExcelService:
                 if v:
                     sec_stats[v] = sec_stats.get(v, 0) + 1
 
-        sem_stats: dict[str, int] = {}
+        sem_detail: dict[str, dict] = {}
         if "SEM" in cols:
             for r in data:
                 v = r.get("SEM")
                 if v and not (isinstance(v, float) and math.isnan(v)):
-                    k = str(v)
-                    sem_stats[k] = sem_stats.get(k, 0) + 1
+                    k = str(int(v) if isinstance(v, (int, float)) else v)
+                    if k not in sem_detail:
+                        sem_detail[k] = {"pedidos": 0, "pecas": 0}
+                    sem_detail[k]["pedidos"] += 1
+                    sem_detail[k]["pecas"] += (
+                        r.get("QTDE", 0) if isinstance(r.get("QTDE"), (int, float)) else 0
+                    )
 
         emb_stats: dict[str, int] = {}
         for r in data:
             v = str(r.get("EMBALAGEM", "")).strip()
             if v and v.lower() != "nan":
                 emb_stats[v] = emb_stats.get(v, 0) + 1
+
+        # Cruzamentos pré-calculados
+        cross_nr_costura_n = sum(
+            1 for r in data
+            if str(r.get("AM", "")).strip() == "NR"
+            and str(r.get("Costura", "")).strip() == "N"
+        )
+        cross_nr_by_section: dict[str, int] = {}
+        for r in data:
+            if str(r.get("AM", "")).strip() == "NR":
+                s = str(r.get(sec_col, "")).strip() if sec_col else ""
+                if s:
+                    cross_nr_by_section[s] = cross_nr_by_section.get(s, 0) + 1
+
+        max_pedido = max(
+            (r for r in data if isinstance(r.get("QTDE"), (int, float))),
+            key=lambda r: r["QTDE"],
+            default=None,
+        )
+        max_pedido_info = ""
+        if max_pedido:
+            sec_val = str(max_pedido.get(sec_col, "")).strip() if sec_col else ""
+            max_pedido_info = (
+                f"Pedido {max_pedido.get('PEDIDO')} com "
+                f"{max_pedido['QTDE']:,.0f} peças, seção {sec_val}"
+            )
 
         # ── Formatar seções ──────────────────────────────────────────
         n = len(data)
@@ -164,9 +195,19 @@ class ExcelService:
             f'{k}={v}' for k, v in sorted(sec_stats.items(), key=lambda x: -x[1])
         )
 
-        sem_txt = ", ".join(
-            f'S{k}={v}' for k, v in
-            sorted(sem_stats.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0)
+        sem_txt = "\n".join(
+            f"  S{k}: {v['pedidos']} pedidos, {v['pecas']:,.0f} peças"
+            for k, v in sorted(
+                sem_detail.items(),
+                key=lambda x: int(x[0]) if x[0].isdigit() else 0,
+            )
+        )
+
+        cross_txt = (
+            f"Cruzamentos pré-calculados:\n"
+            f"  AM=NR com Costura=N: {cross_nr_costura_n} pedidos\n"
+            f"  AM=NR por seção: {', '.join(f'{k}={v}' for k, v in sorted(cross_nr_by_section.items(), key=lambda x: -x[1]))}\n"
+            f"  Pedido com maior QTDE: {max_pedido_info}\n"
         )
 
         ctx = (
@@ -187,7 +228,9 @@ class ExcelService:
             "\n"
             f"Pedidos por Seção ({sec_col}):\n  {sec_txt or 'N/A'}\n"
             "\n"
-            f"Pedidos por Semana:\n  {sem_txt or 'N/A'}\n"
+            f"Pedidos por Semana:\n{sem_txt or '  N/A'}\n"
+            "\n"
+            f"{cross_txt}"
             "\n"
             + (
                 "Tipo de Embalagem (NÃO é etapa produtiva — é tipo de embalagem):\n"

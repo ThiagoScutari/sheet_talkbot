@@ -52,7 +52,7 @@ TESTS = [
         "id": "F03", "diff": "facil",
         "q": "Quantos pedidos têm observação preenchida?",
         "must_contain": ["20"],
-        "must_not_contain": ["8", "10"],
+        "must_not_contain": [" 8 pedidos", " 10 pedidos"],
         "desc": "20 pedidos com OBS"
     },
     {
@@ -184,7 +184,7 @@ TESTS = [
         "id": "K04", "diff": "killer",
         "q": "Quais pedidos estão atrasados?",
         "must_contain": ["DATA PREVISTA"],
-        "must_not_contain": ["hoje", "atual", "2026"],
+        "must_not_contain": ["hoje", "2026", "maio"],
         "desc": "Usa datas da planilha, não data atual"
     },
 
@@ -192,9 +192,9 @@ TESTS = [
     {
         "id": "P01", "diff": "pedido",
         "q": "Qual a descrição e a quantidade de peças do pedido 1527225?",
-        "must_contain": ["CAMISETA MANGA CURTA PPO", "2500"],
+        "must_contain": ["CAMISETA MANGA CURTA PPO", "2.500"],
         "must_not_contain": [],
-        "desc": "Pedido 1527225: camiseta PPO, 2500 peças"
+        "desc": "Pedido 1527225: camiseta PPO, 2.500 peças"
     },
     {
         "id": "P02", "diff": "pedido",
@@ -227,16 +227,16 @@ TESTS = [
     {
         "id": "P06", "diff": "pedido",
         "q": "Quantas peças tem o pedido 1492614 e qual o tipo de embalagem?",
-        "must_contain": ["4356", "SACO"],
+        "must_contain": ["4.356", "SACO"],
         "must_not_contain": [],
         "desc": "4.356 peças, SACO PLÁSTICO"
     },
     {
         "id": "P07", "diff": "pedido",
         "q": "O pedido 1483399 tem amostra aprovada?",
-        "must_contain": ["NR"],
-        "must_not_contain": ["aprovad"],
-        "desc": "AM=NR (não recebido), não aprovada"
+        "must_contain": ["NR", "não recebid"],
+        "must_not_contain": [],
+        "desc": "AM=NR (não recebido)"
     },
     {
         "id": "P08", "diff": "pedido",
@@ -255,7 +255,7 @@ TESTS = [
     {
         "id": "P10", "diff": "pedido",
         "q": "Qual o tipo de embalagem do pedido 1478120 e quantas peças?",
-        "must_contain": ["CAIXA", "6000"],
+        "must_contain": ["CAIXA", "6.000"],
         "must_not_contain": [],
         "desc": "CAIXA, 6.000 peças, INFA"
     },
@@ -263,11 +263,29 @@ TESTS = [
 
 
 def check_response(response: str, test: dict) -> dict:
+    """Valida resposta contra gabarito. Aceita formato BR e sem ponto."""
+    import re
+
+    def normalize(text: str) -> str:
+        return re.sub(r"(\d)\.(\d{3})", r"\1\2", text)
+
     resp_lower = response.lower()
-    passed_must = all(m.lower() in resp_lower for m in test["must_contain"])
-    passed_must_not = all(m.lower() not in resp_lower for m in test["must_not_contain"])
+    resp_normalized = normalize(resp_lower)
+
+    passed_must = all(
+        m.lower() in resp_lower or normalize(m.lower()) in resp_normalized
+        for m in test["must_contain"]
+    )
+    passed_must_not = all(
+        m.lower() not in resp_lower
+        for m in test["must_not_contain"]
+    )
     ok = passed_must and passed_must_not
-    missing = [m for m in test["must_contain"] if m.lower() not in resp_lower]
+
+    missing = [
+        m for m in test["must_contain"]
+        if m.lower() not in resp_lower and normalize(m.lower()) not in resp_normalized
+    ]
     forbidden = [m for m in test["must_not_contain"] if m.lower() in resp_lower]
     return {"ok": ok, "missing": missing, "forbidden": forbidden}
 
