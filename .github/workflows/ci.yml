@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Lint + Security + Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: ruff check app/ tests/
+
+      - name: Security SAST (bandit)
+        run: python -m bandit -r app/ -ll
+
+      - name: Dependency audit (pip-audit)
+        run: python -m pip_audit --ignore-vuln CVE-2025-71176
+
+      - name: Tests + Coverage
+        env:
+          TELEGRAM_BOT_TOKEN: "fake-token-for-tests"
+          ANTHROPIC_API_KEY: "fake-key-for-tests"
+          OPENAI_API_KEY: "fake-key-for-tests"
+        run: |
+          pytest tests/ -v \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-fail-under=75
