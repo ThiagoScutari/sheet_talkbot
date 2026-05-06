@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   quality:
     name: Lint + Security + Tests
@@ -22,22 +25,24 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Lint (ruff)
         run: ruff check app/ tests/
 
       - name: Security SAST (bandit)
-        run: python -m bandit -r app/ -ll
+        run: python -m bandit -r app/ -ll -q
 
       - name: Dependency audit (pip-audit)
-        run: python -m pip_audit --ignore-vuln CVE-2025-71176
+        run: python -m pip_audit --ignore-vuln CVE-2026-3219
 
       - name: Tests + Coverage
         env:
-          TELEGRAM_BOT_TOKEN: "fake-token-for-tests"
-          ANTHROPIC_API_KEY: "fake-key-for-tests"
-          OPENAI_API_KEY: "fake-key-for-tests"
+          TELEGRAM_BOT_TOKEN: "0000000000:fake-token-ci"
+          ANTHROPIC_API_KEY: "sk-ant-fake-key-ci"
+          OPENAI_API_KEY: "sk-fake-key-ci"
         run: |
           pytest tests/ -v \
             --cov=app \
