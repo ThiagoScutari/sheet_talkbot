@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import logging.handlers
+from pathlib import Path
 
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 
@@ -13,14 +15,37 @@ from app.telegram.handlers import (
     handle_voice,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
+def _setup_logging() -> None:
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+
+    fmt = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    console = logging.StreamHandler()
+    console.setFormatter(fmt)
+
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_dir / "sheettalk.log",
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(fmt)
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(console)
+    root.addHandler(file_handler)
+
+
 def run() -> None:
+    _setup_logging()
     token = settings.TELEGRAM_BOT_TOKEN
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN nao configurado em .env")
