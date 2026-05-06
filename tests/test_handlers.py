@@ -292,6 +292,19 @@ async def test_process_text_analyst_uses_analyst_model(mock_update, mock_context
 
 
 @pytest.mark.asyncio
+async def test_process_text_general_uses_analyst_model(mock_update, mock_context, session_with_data):
+    """Intent 'general' deve usar ANALYST_MODEL (Sonnet), nao ORCHESTRATOR_MODEL (Haiku)."""
+    mock_update.message.text = "Sim"
+    with (
+        patch("app.telegram.handlers.detect_intent", return_value="general"),
+        patch("app.telegram.handlers.ask_agent", return_value="resposta") as mock_agent,
+    ):
+        await handle_text(mock_update, mock_context)
+    from app.config import settings
+    assert mock_agent.call_args[0][3] == settings.ANALYST_MODEL
+
+
+@pytest.mark.asyncio
 async def test_process_text_agent_error(mock_update, mock_context, session_with_data):
     mock_update.message.text = "qual o total?"
     with (

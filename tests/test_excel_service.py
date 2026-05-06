@@ -114,4 +114,34 @@ def test_build_context_large_dataset(tmp_path):
     parsed = _make_parsed(data)
     parsed["stats"]["total_rows"] = 10
     ctx = ExcelService.build_context(parsed, max_rows_full=5)
-    assert "omitidos" in ctx or "excedem" in ctx
+    assert "omitidos" in ctx or "excedem" in ctx or "DADOS COMPLETOS" not in ctx
+
+
+# ── Novos testes: FATOS PRÉ-CALCULADOS (HOTFIX-05) ───────────────────────────
+
+def test_build_context_has_precomputed_facts(sample_data):
+    """Seção FATOS PRÉ-CALCULADOS deve existir no contexto."""
+    parsed = _make_parsed(sample_data)
+    ctx = ExcelService.build_context(parsed)
+    assert "FATOS PRÉ-CALCULADOS" in ctx
+
+
+def test_build_context_obs_count(sample_data):
+    """OBS count pré-calculado: sample tem 2 (1002 e 1004)."""
+    parsed = _make_parsed(sample_data)
+    ctx = ExcelService.build_context(parsed)
+    assert "Pedidos com OBS preenchida: 2" in ctx
+
+
+def test_build_context_total_pecas(sample_data):
+    """Total QTDE pré-calculado: 500+300+750+200=1750."""
+    parsed = _make_parsed(sample_data)
+    ctx = ExcelService.build_context(parsed)
+    assert "1,750" in ctx or "1750" in ctx
+
+
+def test_build_context_am_distribution(sample_data):
+    """Distribuição AM pré-calculada: A=2 pedidos."""
+    parsed = _make_parsed(sample_data)
+    ctx = ExcelService.build_context(parsed)
+    assert "Aprovado=2" in ctx

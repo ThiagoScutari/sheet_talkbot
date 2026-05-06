@@ -200,11 +200,9 @@ async def _process_text(
             await update.message.reply_text(f"Erro ao gerar dashboard: {exc}")
         return
 
-    model = (
-        settings.ANALYST_MODEL
-        if intent in ("analyst", "coordinator")
-        else settings.ORCHESTRATOR_MODEL
-    )
+    # Sonnet para tudo que envolve análise de dados (analyst, coordinator, general)
+    # Haiku apenas para intents que não chegam aqui (dashboard/export retornam antes)
+    model = settings.ANALYST_MODEL
 
     await update.message.reply_chat_action(ChatAction.TYPING)
     try:

@@ -48,60 +48,162 @@ class ExcelService:
         }
 
     @staticmethod
-    def build_context(parsed: dict, max_rows_full: int = 500) -> str:
-        active = parsed["active_sheet"]
-        data = parsed["sheets"][active]
-        stats = parsed["stats"]
-        columns = stats["columns"]
-        total_rows = stats["total_rows"]
+    def build_context(parsed: dict, max_rows_full: int = 300) -> str:
+        sheet = parsed["active_sheet"]
+        data = parsed["sheets"][sheet]
+        if not data:
+            return "Planilha vazia."
 
-        lines: list[str] = []
-        lines.append(f"# Planilha: {parsed['filename']}")
-        lines.append(f"Aba ativa: {active} | Linhas: {total_rows} | Colunas: {len(columns)}")
-        lines.append(f"Colunas: {', '.join(str(c) for c in columns)}")
-        lines.append("")
+        cols = list(data[0].keys())
 
-        lines.append("## Amostra (5 primeiras linhas)")
-        for row in data[:5]:
-            lines.append(str({k: v for k, v in row.items() if v is not None}))
-        lines.append("")
-
-        df = pd.DataFrame(data)
-        numeric_cols = df.select_dtypes(include="number").columns.tolist()
-        if numeric_cols:
-            lines.append("## Resumo Numérico")
-            for col in numeric_cols:
-                series = df[col].dropna()
-                if len(series) == 0:
-                    continue
-                lines.append(
-                    f"  {col}: soma={series.sum():.2f}, média={series.mean():.2f}, "
-                    f"min={series.min():.2f}, max={series.max():.2f}"
+        # ── Resumo numérico ─────────────────────────────────────────
+        num_summary = []
+        for col in cols:
+            vals = [
+                r[col] for r in data
+                if isinstance(r[col], (int, float))
+                and not (isinstance(r[col], float) and math.isnan(r[col]))
+            ]
+            if vals:
+                s = sum(vals)
+                num_summary.append(
+                    f'  "{col}": soma={s:.0f}, média={s/len(vals):.1f}, '
+                    f'min={min(vals)}, max={max(vals)}, n={len(vals)}'
                 )
-            lines.append("")
 
-        cat_cols = df.select_dtypes(exclude="number").columns.tolist()
-        if cat_cols:
-            lines.append("## Valores Únicos (colunas categóricas, até 20 valores)")
-            for col in cat_cols[:15]:
-                unique_vals = [v for v in df[col].dropna().unique().tolist() if not (isinstance(v, float) and math.isnan(v))]
-                if 1 < len(unique_vals) <= 20:
-                    lines.append(f"  {col}: {unique_vals}")
-            lines.append("")
+        # ── Valores únicos categóricos ───────────────────────────────
+        uniques = {}
+        for col in cols:
+            vs = sorted({
+                str(r[col]) for r in data
+                if isinstance(r[col], str) and r[col].strip()
+            })
+            if 0 < len(vs) <= 40:
+                uniques[col] = vs
 
-        if total_rows <= max_rows_full:
-            lines.append("## Dados Completos (JSON para cálculos precisos)")
-            serializable = []
-            for row in data:
-                serializable.append(
-                    {k: (str(v) if not isinstance(v, (int, float, str, type(None), bool)) else v)
-                     for k, v in row.items()}
+        # ── FATOS PRÉ-CALCULADOS ─────────────────────────────────────
+        obs_count = sum(
+            1 for r in data
+            if r.get("OBS")
+            and not (isinstance(r.get("OBS"), float) and math.isnan(r["OBS"]))
+            and str(r.get("OBS", "")).strip()
+            and str(r.get("OBS", "")).strip().lower() != "nan"
+        )
+
+        total_pecas = sum(
+            r.get("QTDE", 0) for r in data
+            if isinstance(r.get("QTDE"), (int, float))
+        )
+
+        am_labels = {"A": "Aprovado", "EA": "Em Análise",
+                     "NR": "Não Recebido", "R": "Reprovado"}
+        am_stats: dict[str, int] = {}
+        for r in data:
+            v = str(r.get("AM", "")).strip()
+            if v:
+                am_stats[v] = am_stats.get(v, 0) + 1
+
+        etapas = [
+            "Aprovação Visual", "Fiação", "Tecelagem", "Tinturaria",
+            "Estamparia", "Modelagem", "Corte", "Costura",
+            "Aplicação RFID", "EMBALAGEM",
+        ]
+        pipeline_stats: dict[str, dict[str, int]] = {}
+        for e in etapas:
+            if e in cols:
+                pipeline_stats[e] = {
+                    "F":  sum(1 for r in data if r.get(e) == "F"),
+                    "N":  sum(1 for r in data if r.get(e) == "N"),
+                    "EA": sum(1 for r in data if r.get(e) in ("EA", "E/A")),
+                    "NA": sum(1 for r in data if r.get(e) in ("NA", "N/A")),
+                }
+
+        sec_col = next(
+            (c for c in cols if "seção" in c.lower() or "secao" in c.lower()), None
+        )
+        sec_stats: dict[str, int] = {}
+        if sec_col:
+            for r in data:
+                v = str(r.get(sec_col, "")).strip()
+                if v:
+                    sec_stats[v] = sec_stats.get(v, 0) + 1
+
+        sem_stats: dict[str, int] = {}
+        if "SEM" in cols:
+            for r in data:
+                v = r.get("SEM")
+                if v and not (isinstance(v, float) and math.isnan(v)):
+                    k = str(v)
+                    sem_stats[k] = sem_stats.get(k, 0) + 1
+
+        # ── Formatar seções ──────────────────────────────────────────
+        n = len(data)
+        pipeline_txt = ""
+        for e, s in pipeline_stats.items():
+            total_e = s["F"] + s["N"] + s["EA"] + s["NA"]
+            if total_e > 0:
+                pipeline_txt += (
+                    f'\n  {e}: F={s["F"]} ({s["F"]/n*100:.0f}%), '
+                    f'N={s["N"]} ({s["N"]/n*100:.0f}%), '
+                    f'EA={s["EA"]} ({s["EA"]/n*100:.0f}%), '
+                    f'N/A={s["NA"]} ({s["NA"]/n*100:.0f}%)'
                 )
-            lines.append(json.dumps(serializable, ensure_ascii=False))
+
+        am_txt = ", ".join(
+            f'{am_labels.get(k, k)}={v} ({v/n*100:.0f}%)'
+            for k, v in sorted(am_stats.items())
+        )
+
+        sec_txt = ", ".join(
+            f'{k}={v}' for k, v in sorted(sec_stats.items(), key=lambda x: -x[1])
+        )
+
+        sem_txt = ", ".join(
+            f'S{k}={v}' for k, v in
+            sorted(sem_stats.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0)
+        )
+
+        ctx = (
+            f'ARQUIVO: "{parsed["filename"]}"\n'
+            f'ABA: "{sheet}" | {n} pedidos | {len(cols)} colunas\n'
+            f"COLUNAS: {', '.join(cols)}\n"
+            "\n"
+            "═══════════════════════════════════════════\n"
+            "FATOS PRÉ-CALCULADOS (use ESTES números — não recalcule)\n"
+            "═══════════════════════════════════════════\n"
+            f"Total de pedidos: {n}\n"
+            f"Total de peças (QTDE): {total_pecas:,.0f}\n"
+            f"Pedidos com OBS preenchida: {obs_count}\n"
+            "\n"
+            f"Status AM (Amostra):\n  {am_txt}\n"
+            "\n"
+            f"Pipeline de Produção (por etapa):{pipeline_txt or ' (sem colunas de etapa)'}\n"
+            "\n"
+            f"Pedidos por Seção ({sec_col}):\n  {sec_txt or 'N/A'}\n"
+            "\n"
+            f"Pedidos por Semana:\n  {sem_txt or 'N/A'}\n"
+            "═══════════════════════════════════════════\n"
+            "\n"
+            "RESUMO NUMÉRICO:\n"
+            f"{chr(10).join(num_summary) or '  Nenhuma coluna numérica.'}\n"
+            "\n"
+            "VALORES ÚNICOS:\n"
+            f"{chr(10).join(f'  \"{k}\": {v}' for k, v in uniques.items()) or '  Nenhum.'}\n"
+            "\n"
+            f"AMOSTRA (5 primeiras linhas):\n"
+            f"{json.dumps(data[:5], ensure_ascii=False, default=str)}"
+        )
+
+        if n <= max_rows_full:
+            ctx += f"\n\nDADOS COMPLETOS ({n} linhas):\n"
+            ctx += json.dumps(data, ensure_ascii=False, default=str)
         else:
-            lines.append(f"(Dados completos omitidos — {total_rows} linhas excedem o limite {max_rows_full})")
+            ctx += (
+                f"\n\n[NOTA: {n} linhas — use os FATOS PRÉ-CALCULADOS acima "
+                "para respostas precisas]"
+            )
 
-        return "\n".join(lines)
+        return ctx
 
     @staticmethod
     def apply_edit(data: list[dict], command: str) -> dict:
