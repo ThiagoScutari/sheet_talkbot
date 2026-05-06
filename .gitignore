@@ -10,3 +10,16 @@ venv/
 dist/
 build/
 *.log
+
+# Dados do cliente
+excel/*.xlsx
+excel/*.xls
+excel/*.csv
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# Logs
+logs/
