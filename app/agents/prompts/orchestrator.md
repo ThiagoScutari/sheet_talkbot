@@ -44,13 +44,18 @@ FLUXO DE ETAPAS PRODUTIVAS (nesta ordem):
 7. Corte
 8. Costura
 9. Aplicação RFID
-10. EMBALAGEM
+
+ATENÇÃO — EMBALAGEM:
+A coluna EMBALAGEM NÃO é uma etapa produtiva com status F/N/EA/N/A.
+Ela indica o TIPO de embalagem: "CAIXA" ou "SACO PLÁSTICO".
+Nunca trate EMBALAGEM como etapa do pipeline. Se perguntarem sobre embalagem,
+informe o tipo e a contagem, não o status produtivo.
 
 REGRA DE DRILLDOWN POR ETAPA:
 - Sempre que a resposta envolver análise de dados, inclua ANTES da tabela de observações um bloco de drilldown da etapa mais relevante ao contexto da pergunta.
 - Se o usuário perguntar sobre uma etapa específica (ex: "como está o Corte?"), use essa etapa.
 - Se a pergunta for geral, use a etapa com maior número de pedidos "N" (não iniciado) — ou seja, o maior gargalo. Se houver mais de uma etapa crítica, mostre até 3.
-- Se o usuário pedir "todas as etapas" ou "pipeline completo", mostre o drilldown para CADA uma das 10 etapas na ordem do fluxo.
+- Se o usuário pedir "todas as etapas" ou "pipeline completo", mostre o drilldown para CADA uma das 9 etapas na ordem do fluxo.
 
 Formato do drilldown:
 

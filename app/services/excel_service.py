@@ -106,7 +106,7 @@ class ExcelService:
         etapas = [
             "Aprovação Visual", "Fiação", "Tecelagem", "Tinturaria",
             "Estamparia", "Modelagem", "Corte", "Costura",
-            "Aplicação RFID", "EMBALAGEM",
+            "Aplicação RFID",
         ]
         pipeline_stats: dict[str, dict[str, int]] = {}
         for e in etapas:
@@ -135,6 +135,12 @@ class ExcelService:
                 if v and not (isinstance(v, float) and math.isnan(v)):
                     k = str(v)
                     sem_stats[k] = sem_stats.get(k, 0) + 1
+
+        emb_stats: dict[str, int] = {}
+        for r in data:
+            v = str(r.get("EMBALAGEM", "")).strip()
+            if v and v.lower() != "nan":
+                emb_stats[v] = emb_stats.get(v, 0) + 1
 
         # ── Formatar seções ──────────────────────────────────────────
         n = len(data)
@@ -182,7 +188,17 @@ class ExcelService:
             f"Pedidos por Seção ({sec_col}):\n  {sec_txt or 'N/A'}\n"
             "\n"
             f"Pedidos por Semana:\n  {sem_txt or 'N/A'}\n"
-            "═══════════════════════════════════════════\n"
+            "\n"
+            + (
+                "Tipo de Embalagem (NÃO é etapa produtiva — é tipo de embalagem):\n"
+                + "".join(
+                    f"  {k}: {v} pedidos ({v/n*100:.0f}%)\n"
+                    for k, v in sorted(emb_stats.items(), key=lambda x: -x[1])
+                )
+                + "NOTA: A coluna EMBALAGEM NÃO segue o padrão F/N/EA das etapas produtivas.\n"
+                if emb_stats else ""
+            )
+            + "═══════════════════════════════════════════\n"
             "\n"
             "RESUMO NUMÉRICO:\n"
             f"{chr(10).join(num_summary) or '  Nenhuma coluna numérica.'}\n"

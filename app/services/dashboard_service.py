@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import warnings
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -70,6 +71,11 @@ _TEMPLATE = """<!DOCTYPE html>
     <canvas id="barSecao"></canvas>
   </div>
 
+  <div class="chart-card">
+    <h2>Tipo de Embalagem</h2>
+    <canvas id="donutEmb"></canvas>
+  </div>
+
   <div class="chart-card wide">
     <h2>Pipeline de Produção</h2>
     <canvas id="stackedPipeline"></canvas>
@@ -89,7 +95,6 @@ _TEMPLATE = """<!DOCTYPE html>
     <button class="etapa-btn" onclick="showEtapa(6)">Corte</button>
     <button class="etapa-btn" onclick="showEtapa(7)">Costura</button>
     <button class="etapa-btn" onclick="showEtapa(8)">RFID</button>
-    <button class="etapa-btn" onclick="showEtapa(9)">Embalagem</button>
   </div>
   <div id="etapa-card">
     <div class="etapa-title" id="etapa-nome"></div>
@@ -212,12 +217,22 @@ new Chart(document.getElementById('stackedPipeline'), {
   }
 });
 
+// 5b. Donut Embalagem
+new Chart(document.getElementById('donutEmb'), {
+  type: 'doughnut',
+  data: {
+    labels: {{ emb_labels | tojson }},
+    datasets: [{ data: {{ emb_data | tojson }}, backgroundColor: ['#F59E0B', '#3B82F6'], borderWidth: 0 }]
+  },
+  options: { responsive: true, plugins: { legend: { labels: { color: '#EAF0FA', font: { size: 11 } } } } }
+});
+
 // 5. Drilldown por Etapa
 const etapasData = {{ etapas_json | safe }};
 const totalPedidos = {{ total_rows }};
 const etapaNames = [
   "Aprovação Visual","Fiação","Tecelagem","Tinturaria","Estamparia",
-  "Modelagem","Corte","Costura","Aplicação RFID","EMBALAGEM"
+  "Modelagem","Corte","Costura","Aplicação RFID"
 ];
 
 function showEtapa(idx) {
@@ -252,7 +267,7 @@ class DashboardService:
     ETAPAS = [
         "Aprovação Visual", "Fiação", "Tecelagem", "Tinturaria",
         "Estamparia", "Modelagem", "Corte", "Costura",
-        "Aplicação RFID", "Embalagem",
+        "Aplicação RFID",
     ]
 
     @staticmethod
@@ -316,7 +331,7 @@ class DashboardService:
         etapa_display = [
             "Aprov. Visual", "Fiação", "Tecelagem", "Tinturaria",
             "Estamparia", "Modelagem", "Corte", "Costura",
-            "RFID", "Embalagem",
+            "RFID",
         ]
         pipeline_f, pipeline_ea, pipeline_n = [], [], []
         etapas_stats = []
@@ -337,6 +352,18 @@ class DashboardService:
                 pipeline_ea.append(0)
                 pipeline_n.append(total_pedidos)
                 etapas_stats.append({"F": 0, "N": total_pedidos, "EA": 0, "NA": 0})
+
+        # --- Embalagem donut ---
+        emb_counter = Counter(
+            str(r.get("EMBALAGEM", "")).strip()
+            for r in data
+            if str(r.get("EMBALAGEM", "")).strip()
+            and str(r.get("EMBALAGEM", "")).strip().lower() != "nan"
+        )
+        emb_total = sum(emb_counter.values()) or 1
+        emb_sorted = sorted(emb_counter.items(), key=lambda x: -x[1])
+        emb_labels = [f"{k} ({v} — {v/emb_total*100:.0f}%)" for k, v in emb_sorted]
+        emb_data_vals = [v for _, v in emb_sorted]
 
         # --- OBS table ---
         pedido_col = col("PEDIDO")
@@ -375,6 +402,8 @@ class DashboardService:
             etapas_json=json.dumps(etapas_stats),
             total_rows=total_pedidos,
             obs_data=obs_data,
+            emb_labels=emb_labels,
+            emb_data=emb_data_vals,
         )
 
         out_path.write_text(html, encoding="utf-8")

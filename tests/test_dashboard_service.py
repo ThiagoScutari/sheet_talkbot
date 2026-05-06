@@ -59,3 +59,21 @@ def test_html_has_obs_table(sample_data, tmp_path):
     path = DashboardService.generate(parsed, tmp_path)
     content = path.read_text(encoding="utf-8")
     assert "Observa" in content
+
+
+# ── Novos testes: EMBALAGEM (HOTFIX-06) ──────────────────────────────────────
+
+def test_html_has_embalagem_donut(sample_data, tmp_path):
+    """Dashboard deve ter gráfico de Tipo de Embalagem com CAIXA e SACO PLÁSTICO."""
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    assert "Tipo de Embalagem" in content
+
+
+def test_pipeline_excludes_embalagem_button(sample_data, tmp_path):
+    """Drilldown deve ter 9 etapas — EMBALAGEM não é etapa produtiva."""
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    assert 'showEtapa(9)' not in content

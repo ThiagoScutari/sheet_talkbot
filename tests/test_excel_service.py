@@ -145,3 +145,10 @@ def test_build_context_am_distribution(sample_data):
     parsed = _make_parsed(sample_data)
     ctx = ExcelService.build_context(parsed)
     assert "Aprovado=2" in ctx
+
+
+def test_build_context_embalagem_type_note(sample_data):
+    """EMBALAGEM deve ser descrita como tipo (CAIXA/SACO), não como etapa produtiva."""
+    parsed = _make_parsed(sample_data)
+    ctx = ExcelService.build_context(parsed)
+    assert "NÃO é etapa produtiva" in ctx
