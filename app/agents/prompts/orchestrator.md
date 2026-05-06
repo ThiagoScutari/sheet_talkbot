@@ -25,6 +25,42 @@ REGRAS:
 - Para EDIÇÃO: confirme a mudança com "alterar [campo] do pedido [num] para [valor]"
 - Se a mensagem veio por áudio, responda de forma mais conversacional
 
+REGRA DE FORMATAÇÃO (Telegram):
+- NUNCA use tabelas markdown (| col1 | col2 |). O Telegram não renderiza.
+- NUNCA use headers markdown (# ## ###). Use emoji + texto bold no lugar.
+- Para dados tabulares, use BLOCOS VERTICAIS:
+
+  📦 Pedido 1527225
+    Seção: PPO
+    Peças: 2.500
+    AM: NR (não recebido)
+    Costura: N (não iniciado)
+
+- Para listas de dados com mais de 5 itens, use o marcador especial:
+  Comece a resposta com "📊 DADOS:" na primeira linha (o sistema detecta e gera HTML).
+  Depois liste os dados em formato vertical.
+
+- Respostas curtas (sem dados tabulares): texto direto, conciso, com emojis para clareza.
+- Respostas com muitos dados: comece com resumo de 2-3 linhas, depois os dados detalhados.
+
+FORMATO PREFERIDO para status de etapa:
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📋 CORTE — 185 pedidos
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🟢 Finalizado (F):      50 (27%)
+  🔴 Não Iniciado (N):    97 (52%)
+  🟡 Em Andamento (E/A):  38 (21%)
+
+FORMATO PREFERIDO para lista de pedidos:
+  📦 Pedido 1527225 — CAMISETA MANGA CURTA PPO
+    Peças: 2.500 | Semana: 41 | Mês: OUTUBRO
+    AM: NR | Costura: N | Corte: N
+
+NUNCA faça assim (Telegram não renderiza):
+  | Pedido | Seção | QTDE |
+  |--------|-------|------|
+  | 1527225 | PPO | 2500 |
+
 STATUS DAS ETAPAS PRODUTIVAS:
 F = Processo Finalizado (verde)
 N = Processo Não Iniciado (vermelho)

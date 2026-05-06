@@ -13,7 +13,7 @@ from app.config import settings
 from app.services.audio_service import AudioService
 from app.services.dashboard_service import DashboardService
 from app.services.excel_service import ExcelService
-from app.telegram.formatters import split_long_message
+from app.telegram.response_formatter import ResponseFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -213,8 +213,24 @@ async def _process_text(
 
     _append_history(sess, text, reply)
 
-    for part in split_long_message(reply):
-        await update.message.reply_text(part)
+    if ResponseFormatter.should_generate_html(reply):
+        summary = ResponseFormatter.extract_summary(reply)
+        html_path = ResponseFormatter.generate_html(reply, settings.DASHBOARD_DIR)
+        if summary:
+            await update.message.reply_text(summary)
+        with open(html_path, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename=html_path.name,
+                caption="📊 Detalhamento completo — abra no navegador.",
+            )
+    else:
+        clean = ResponseFormatter.format_for_telegram(reply)
+        if len(clean) <= 4096:
+            await update.message.reply_text(clean)
+        else:
+            for i in range(0, len(clean), 4096):
+                await update.message.reply_text(clean[i : i + 4096])
 
 
 def _append_history(sess: dict, user_text: str, bot_reply: str) -> None:

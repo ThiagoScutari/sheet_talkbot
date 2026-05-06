@@ -1,6 +1,7 @@
 """Testes dos handlers -- logica de sessao e roteamento."""
 from __future__ import annotations
 
+import unittest.mock
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -314,6 +315,40 @@ async def test_process_text_agent_error(mock_update, mock_context, session_with_
         await handle_text(mock_update, mock_context)
     mock_update.message.reply_text.assert_called_once()
     assert "Erro" in mock_update.message.reply_text.call_args[0][0]
+
+
+# ── ResponseFormatter integration ────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_process_text_long_reply_sends_html(mock_update, mock_context, session_with_data, tmp_path):
+    """Resposta longa (>30 linhas) deve gerar HTML e enviar como documento."""
+    long_reply = "linha de dados\n" * 35
+    mock_update.message.text = "liste todos os pedidos"
+    with (
+        patch("app.telegram.handlers.detect_intent", return_value="general"),
+        patch("app.telegram.handlers.ask_agent", return_value=long_reply),
+        patch("app.telegram.handlers.ResponseFormatter.generate_html", return_value=tmp_path / "test.html"),
+        patch("app.telegram.handlers.ResponseFormatter.should_generate_html", return_value=True),
+        patch("app.telegram.handlers.ResponseFormatter.extract_summary", return_value="Resumo curto"),
+        patch("builtins.open", unittest.mock.mock_open(read_data=b"<html/>")),
+    ):
+        (tmp_path / "test.html").write_text("<html/>")
+        await handle_text(mock_update, mock_context)
+    mock_update.message.reply_document.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_process_text_short_reply_stays_in_chat(mock_update, mock_context, session_with_data):
+    """Resposta curta deve ficar só no chat (reply_text, sem HTML)."""
+    mock_update.message.text = "quantos pedidos?"
+    with (
+        patch("app.telegram.handlers.detect_intent", return_value="general"),
+        patch("app.telegram.handlers.ask_agent", return_value="São 185 pedidos."),
+        patch("app.telegram.handlers.ResponseFormatter.should_generate_html", return_value=False),
+    ):
+        await handle_text(mock_update, mock_context)
+    mock_update.message.reply_document.assert_not_called()
+    mock_update.message.reply_text.assert_called()
 
 
 # ── handle_voice ──────────────────────────────────────────────────────────────
