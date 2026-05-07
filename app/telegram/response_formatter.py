@@ -176,8 +176,16 @@ class ResponseFormatter:
         return "\n\n".join(blocks)
 
     @staticmethod
+    def _markdown_to_html(text: str) -> str:
+        text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+        text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
+        text = re.sub(r"`(.+?)`", r"<code>\1</code>", text)
+        return text
+
+    @staticmethod
     def generate_html(response: str, output_dir: Path) -> Path:
         content = response.replace("📊 DADOS:", "").strip()
+        content = ResponseFormatter._markdown_to_html(content)
         timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
         html = HTML_TEMPLATE.render(
             title="Detalhamento",

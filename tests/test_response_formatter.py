@@ -70,6 +70,25 @@ class TestFormatForTelegram:
         assert "---" not in result or "|" not in result
 
 
+class TestMarkdownToHtml:
+    def test_bold_converted(self):
+        result = ResponseFormatter._markdown_to_html("**negrito**")
+        assert "<strong>negrito</strong>" in result
+        assert "**" not in result
+
+    def test_italic_converted(self):
+        result = ResponseFormatter._markdown_to_html("*itálico*")
+        assert "<em>itálico</em>" in result
+
+    def test_code_converted(self):
+        result = ResponseFormatter._markdown_to_html("`código`")
+        assert "<code>código</code>" in result
+
+    def test_plain_text_unchanged(self):
+        result = ResponseFormatter._markdown_to_html("texto normal")
+        assert result == "texto normal"
+
+
 class TestGenerateHtml:
     def test_creates_file(self, tmp_path):
         path = ResponseFormatter.generate_html("Conteúdo de teste", tmp_path)
@@ -84,3 +103,10 @@ class TestGenerateHtml:
         content = path.read_text(encoding="utf-8")
         assert "viewport" in content
         assert "width=device-width" in content
+
+    def test_bold_markdown_rendered_as_html(self, tmp_path):
+        """**bold** no conteúdo deve virar <strong> no HTML, não asteriscos literais."""
+        path = ResponseFormatter.generate_html("**negrito** e texto normal", tmp_path)
+        content = path.read_text(encoding="utf-8")
+        assert "<strong>negrito</strong>" in content
+        assert "**negrito**" not in content

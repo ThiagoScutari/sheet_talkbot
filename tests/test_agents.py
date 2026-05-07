@@ -59,6 +59,21 @@ async def test_ask_agent_success():
 
 
 @pytest.mark.asyncio
+async def test_ask_agent_uses_max_tokens_4096():
+    """ask_agent deve usar max_tokens=4096 para suportar respostas longas."""
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="ok")]
+    mock_client = MagicMock()
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+    with patch("app.agents.orchestrator.anthropic.AsyncAnthropic", return_value=mock_client):
+        await ask_agent("ctx", "pergunta?", [], "model")
+
+    call_kwargs = mock_client.messages.create.call_args.kwargs
+    assert call_kwargs["max_tokens"] == 4096
+
+
+@pytest.mark.asyncio
 async def test_ask_agent_error():
     mock_client = MagicMock()
     mock_client.messages = MagicMock()
