@@ -77,3 +77,41 @@ def test_pipeline_excludes_embalagem_button(sample_data, tmp_path):
     path = DashboardService.generate(parsed, tmp_path)
     content = path.read_text(encoding="utf-8")
     assert 'showEtapa(9)' not in content
+
+
+# ── Novos testes: labels com qtd+% (HOTFIX-10) ───────────────────────────────
+
+def test_secao_labels_include_qty_pct(sample_data, tmp_path):
+    """Labels do gráfico de seção devem ter formato 'NOME (N — XX%)'."""
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    # sample: Feminino=2, total=4 → "Feminino (2 — 50%)"
+    assert "Feminino (2" in content
+
+
+def test_sem_labels_include_ped_count(sample_data, tmp_path):
+    """Labels do gráfico de semana devem conter contagem de pedidos."""
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    # sample: SEM=01 tem 2 pedidos → "S01 (2 ped"
+    assert "S01 (2 ped" in content
+
+
+def test_am_labels_include_qty_pct(sample_data, tmp_path):
+    """Labels do donut AM devem conter contagem e percentual."""
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    # sample: A=2 de 4 → "Aprovado (2 — 50%)"
+    assert "Aprovado (2" in content
+
+
+def test_big_number_nr_shows_pct(sample_data, tmp_path):
+    """Big number de NR deve mostrar percentual no sub-texto."""
+    parsed = _make_parsed(sample_data)
+    path = DashboardService.generate(parsed, tmp_path)
+    content = path.read_text(encoding="utf-8")
+    # sample: NR=1 de 4 pedidos = 25%
+    assert "(25%)" in content

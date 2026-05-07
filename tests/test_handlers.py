@@ -154,6 +154,37 @@ async def test_handle_document_xlsx_ok(mock_update, mock_context):
 
 
 @pytest.mark.asyncio
+async def test_handle_document_generates_dashboard_automatically(mock_update, mock_context, tmp_path):
+    """Após upload de xlsx, dashboard deve ser gerado e enviado automaticamente."""
+    mock_update.message.document.file_name = "planilha.xlsx"
+    mock_update.message.document.file_id = "file_abc"
+
+    fake_tg_file = MagicMock()
+    fake_tg_file.download_to_memory = AsyncMock()
+    mock_context.bot.get_file = AsyncMock(return_value=fake_tg_file)
+
+    parsed_mock = {
+        "filename": "planilha.xlsx",
+        "active_sheet": "Sheet1",
+        "sheets": {"Sheet1": [{"COL": "val"}]},
+        "sheet_names": ["Sheet1"],
+        "stats": {"total_rows": 1, "total_cols": 1, "columns": ["COL"]},
+    }
+    html_file = tmp_path / "dashboard.html"
+    html_file.write_text("<html/>")
+
+    with (
+        patch("app.telegram.handlers.ExcelService.save_upload", return_value=Path("/tmp/x.xlsx")),
+        patch("app.telegram.handlers.ExcelService.parse", return_value=parsed_mock),
+        patch("app.telegram.handlers.ExcelService.build_context", return_value="ctx"),
+        patch("app.telegram.handlers.DashboardService.generate", return_value=html_file),
+    ):
+        await handle_document(mock_update, mock_context)
+
+    mock_update.message.reply_document.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_handle_document_parse_error(mock_update, mock_context):
     mock_update.message.document.file_name = "bad.xlsx"
     mock_update.message.document.file_id = "file_bad"

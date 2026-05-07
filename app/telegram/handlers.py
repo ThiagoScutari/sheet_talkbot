@@ -98,6 +98,25 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
     await update.message.reply_text(reply)
 
+    # Dashboard automático
+    await context.bot.send_chat_action(
+        chat_id=update.effective_chat.id, action="upload_document"
+    )
+    try:
+        temp_parsed = {
+            **sess["parsed"],
+            "sheets": {active: sess["edit_data"]},
+        }
+        dashboard_path = DashboardService.generate(temp_parsed, settings.DASHBOARD_DIR)
+        with open(dashboard_path, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename=dashboard_path.name,
+                caption="📊 Dashboard gerado automaticamente. Abra no navegador.",
+            )
+    except Exception as exc:
+        logger.warning("Dashboard auto error: %s", exc)
+
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not (settings.TELEGRAM_BOT_TOKEN and settings.OPENAI_API_KEY):

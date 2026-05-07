@@ -51,8 +51,8 @@ _TEMPLATE = """<!DOCTYPE html>
   <div class="card"><div class="value">{{ total_pedidos }}</div><div class="label">Total Pedidos</div></div>
   <div class="card"><div class="value">{{ total_pecas }}</div><div class="label">Total Peças</div></div>
   <div class="card"><div class="value">{{ taxa_aprovacao }}%</div><div class="label">Aprovação AM</div></div>
-  <div class="card"><div class="value">{{ pendentes_nr }}</div><div class="label">Pendentes NR</div></div>
-  <div class="card"><div class="value">{{ com_obs }}</div><div class="label">Com OBS</div></div>
+  <div class="card"><div class="value">{{ pendentes_nr }}</div><div class="label">Pendentes NR</div><div class="label" style="color:#F59E0B">({{ nr_pct }})</div></div>
+  <div class="card"><div class="value">{{ com_obs }}</div><div class="label">Com OBS</div><div class="label" style="color:#8B5CF6">({{ obs_pct }})</div></div>
 </div>
 
 <div class="charts">
@@ -167,7 +167,7 @@ new Chart(document.getElementById('barSem'), {
 new Chart(document.getElementById('donutAM'), {
   type: 'doughnut',
   data: {
-    labels: ['Aprovado', 'Em Análise', 'Não Recebido', 'Reprovado'],
+    labels: {{ am_labels | tojson }},
     datasets: [{
       data: {{ am_data | tojson }},
       backgroundColor: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444'],
@@ -304,15 +304,31 @@ class DashboardService:
             aprovados = em_analise = nao_recebido = reprovado = 0
             taxa = 0
 
+        def _pct(n: int) -> str:
+            return f"{n/total_pedidos*100:.0f}%" if total_pedidos else "0%"
+
+        am_labels = [
+            f"Aprovado ({aprovados} — {_pct(aprovados)})",
+            f"Em Análise ({em_analise} — {_pct(em_analise)})",
+            f"Não Recebido ({nao_recebido} — {_pct(nao_recebido)})",
+            f"Reprovado ({reprovado} — {_pct(reprovado)})",
+        ]
+        nr_pct = _pct(nao_recebido)
+
         obs_col = col("OBS")
         com_obs = int(df[obs_col].notna().sum()) if obs_col and obs_col in df else 0
+        obs_pct = _pct(com_obs)
 
         # --- Bar Semana ---
         sem_col = col("SEM")
         if sem_col and sem_col in df:
-            grp = df.groupby(sem_col)[qtde_col].sum().sort_index() if qtde_col else df[sem_col].value_counts().sort_index()
-            sem_labels = [str(k) for k in grp.index.tolist()]
-            sem_data = [int(v) for v in grp.values.tolist()]
+            sem_counts = df[sem_col].value_counts().sort_index()
+            sem_pecas = df.groupby(sem_col)[qtde_col].sum().sort_index() if qtde_col else sem_counts
+            sem_labels = [
+                f"S{k} ({sem_counts.get(k, 0)} ped — {sem_counts.get(k, 0)/total_pedidos*100:.0f}%)"
+                for k in sem_counts.index.tolist()
+            ]
+            sem_data = [int(sem_pecas.get(k, 0)) for k in sem_counts.index.tolist()]
         else:
             sem_labels, sem_data = [], []
 
@@ -322,7 +338,10 @@ class DashboardService:
             secao_col = col("SEÇÃO") or col("SECAO")
         if secao_col and secao_col in df:
             grp_secao = df[secao_col].value_counts().head(10)
-            secao_labels = grp_secao.index.tolist()
+            secao_labels = [
+                f"{k} ({v} — {v/total_pedidos*100:.0f}%)"
+                for k, v in grp_secao.items()
+            ]
             secao_data = grp_secao.values.tolist()
         else:
             secao_labels, secao_data = [], []
@@ -389,9 +408,12 @@ class DashboardService:
             total_pecas=f"{total_pecas:,}".replace(",", "."),
             taxa_aprovacao=taxa,
             pendentes_nr=nao_recebido,
+            nr_pct=nr_pct,
             com_obs=com_obs,
+            obs_pct=obs_pct,
             sem_labels=sem_labels,
             sem_data=sem_data,
+            am_labels=am_labels,
             am_data=[aprovados, em_analise, nao_recebido, reprovado],
             secao_labels=secao_labels,
             secao_data=secao_data,
